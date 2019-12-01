@@ -1509,6 +1509,10 @@ export interface HasPropsReadonly extends ReadonlyType<HasProps, any, any, any> 
  * @since 1.1.0
  */
 export interface HasPropsIntersection extends IntersectionType<Array<HasProps>, any, any, any> {}
+
+export interface HasPropsRecursive extends RecursiveType<HasProps, any, any, any> {}
+
+export interface HasPropsExact extends ExactType<HasProps, any, any, any> {}
 /**
  * @since 1.1.0
  */
@@ -1516,6 +1520,8 @@ export type HasProps =
   | HasPropsRefinement
   | HasPropsReadonly
   | HasPropsIntersection
+  | HasPropsRecursive
+  | HasPropsExact
   | InterfaceType<any, any, any, any>
   // tslint:disable-next-line: deprecation
   | StrictType<any, any, any, any>
@@ -1525,6 +1531,8 @@ const getProps = (codec: HasProps): Props => {
   switch (codec._tag) {
     case 'RefinementType':
     case 'ReadonlyType':
+    case 'ExactType':
+    case 'RecursiveType':
       return getProps(codec.type)
     case 'InterfaceType':
     case 'StrictType':
@@ -1569,13 +1577,19 @@ const getExactTypeName = (codec: Any): string => {
  * @since 1.1.0
  */
 export const exact = <C extends HasProps>(codec: C, name: string = getExactTypeName(codec)): ExactC<C> => {
-  const props: Props = getProps(codec)
+  let props: Props | undefined;
+  const ensureProps = () => props = props || getProps(codec);
   return new ExactType(
     name,
     codec.is,
-    (u, c) =>
-      UnknownRecord.validate(u, c).chain(() => codec.validate(u, c).fold(left, a => success(stripKeys(a, props)))),
-    a => codec.encode(stripKeys(a, props)),
+    (u, c) => {
+      ensureProps();
+      return UnknownRecord.validate(u, c).chain(() => codec.validate(u, c).fold(left, a => success(stripKeys(a, props!))))
+    },
+    a => {
+      ensureProps();
+      return codec.encode(stripKeys(a, props!))
+    },
     codec
   )
 }
